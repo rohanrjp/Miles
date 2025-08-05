@@ -1,7 +1,9 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 import httpx
-from .config.config import settings
+from config.config import settings
+from graph import run_graph
+from models.domain import User
 
 BOT_TOKEN = settings.BOT_TOKEN
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
@@ -18,8 +20,10 @@ async def telegram_webhook(update: TelegramUpdate):
     chat_id = message["chat"]["id"]
     text = message.get("text", "")
 
-    # Call your Pydantic-AI graph here
-    
+    # TODO: Replace with a real user object
+    user = User(name="Rohan Paul", email="rohan1007rjp@gmail.com", interests=["Python", "Go"])
+
+    result = await run_graph(text, user)
 
     # Send result back to Telegram
     async with httpx.AsyncClient() as client:

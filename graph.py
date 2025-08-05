@@ -79,7 +79,7 @@ class TeamLeader(BaseNode[State]):
 
 # --- Graph Execution ---
 
-async def run_assistant(input_request: str, user: User):
+async def run_graph(input_request: str, user: User):
     """Helper function to initialize and run the graph for a given request."""
     print(f"--- Running Graph for: '{input_request}' ---")
     initial_state = State(user=user, input_request=input_request)
@@ -95,36 +95,4 @@ async def run_assistant(input_request: str, user: User):
     print("\nFinal State Dump:")
     print(final_state)
     print("\n" + "="*60 + "\n")
-
-
-async def main():
-    rohan = User(
-        name='Rohan Paul',
-        email='rohan1007rjp@gmail.com',
-        interests=['Python', 'Go'],
-    )
-
-    # Example 1: User asks for run data
-    await run_assistant("I want my latest run data from Strava", user=rohan)
-
-    # Example 2: User asks for specific activity details (replace with a real activity ID from your Strava)
-    # await run_assistant("Tell me more about activity 123456789", user=rohan)
-
-    # Example 3: User asks for athlete profile
-    await run_assistant("What is my Strava profile information?", user=rohan)
-
-    # Example 4: User asks for weekly summary
-    await run_assistant("What is my weekly Strava summary?", user=rohan)
-
-    # Example 5: User asks for progress trend
-    await run_assistant("What is my progress trend for running?", user=rohan)
-
-    # Example 6: User asks for the weather
-    await run_assistant("What's the weather like in London tomorrow?", user=rohan)
-
-    # Example 7: User asks a general question
-    await run_assistant("Can you list the top five highest-grossing animated films of 2024?", user=rohan)
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+    return final_state.output
