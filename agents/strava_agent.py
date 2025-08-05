@@ -1,13 +1,409 @@
-from pydantic_ai import Agent
+import time
+from stravalib.client import Client
+from pydantic_ai.agent import Agent, RunContext
 from config.llm_config import gemini_model
+from config.config import settings
+from sqlalchemy import desc
+from models import StravaToken
+from config.database import get_db
+
+def get_strava_token():
+    """Reads token from the database."""
+    db = next(get_db())
+    token_info = db.query(StravaToken).order_by(desc(StravaToken.id)).first()
+    if token_info:
+        return {
+            "access_token": token_info.access_token,
+            "refresh_token": token_info.refresh_token,
+            "expires_at": token_info.expires_at,
+        }
+    return None
+
+def save_strava_token(token_info):
+    """Saves token info to the database."""
+    db = next(get_db())
+    new_token = StravaToken(**token_info)
+    db.add(new_token)
+    db.commit()
+    print("Successfully saved Strava token to the database.")
+
+def get_strava_client():
+    """Initializes and returns a Strava client, handling token refresh."""
+    client = Client()
+    token_info = get_strava_token()
+
+    if not all([settings.STRAVA_CLIENT_ID, settings.STRAVA_CLIENT_SECRET]):
+        raise ValueError(
+            "Missing STRAVA_CLIENT_ID or STRAVA_CLIENT_SECRET in your settings. "
+            "Cannot refresh token."
+        )
+
+    if time.time() > token_info.get("expires_at", 0):
+        print("Strava access token has expired. Refreshing...")
+        try:
+            refresh_response = client.refresh_access_token(
+                client_id=settings.STRAVA_CLIENT_ID,
+                client_secret=settings.STRAVA_CLIENT_SECRET,
+                refresh_token=token_info["refresh_token"],
+            )
+            save_strava_token(refresh_response)
+            token_info = refresh_response
+            print("Strava token refreshed successfully.")
+        except Exception as e:
+            print(f"Error refreshing Strava token: {e}")
+            raise
+
+    client.access_token = token_info["access_token"]
+    client.refresh_token = token_info["refresh_token"]
+    return client
+
+def get_athlete_stats(run_context: RunContext) -> dict:
+    """
+    Fetches the activity stats for the authenticated athlete.
+
+    Returns:
+        A dictionary containing the athlete's stats.
+    """
+    client = get_strava_client()
+    athlete = client.get_athlete()
+    return athlete.stats.to_dict()
+
+def get_latest_activities(run_context: RunContext, limit: int = 5) -> list[dict]:
+    """
+    Fetches the most recent activities for the authenticated user.
+
+    Args:
+        limit: The number of activities to fetch.
+
+    Returns:
+        A list of dictionaries, where each dictionary represents an activity.
+    """
+    client = get_strava_client()
+    activities = client.get_activities(limit=limit)
+    
+    result_activities = []
+    for activity in activities:
+        result_activities.append({
+            "id": activity.id,
+            "name": activity.name,
+            "distance": float(activity.distance) if activity.distance else None,
+            "distance_unit": str(activity.distance.unit) if activity.distance else None,
+            "moving_time": str(activity.moving_time) if activity.moving_time else None,
+            "elapsed_time": str(activity.elapsed_time) if activity.elapsed_time else None,
+            "type": activity.type,
+            "start_date": str(activity.start_date),
+            "average_speed": float(activity.average_speed) if activity.average_speed else None,
+            "average_speed_unit": str(activity.average_speed.unit) if activity.average_speed else None,
+            "max_speed": float(activity.max_speed) if activity.max_speed else None,
+            "max_speed_unit": str(activity.max_speed.unit) if activity.max_speed else None,
+            "total_elevation_gain": float(activity.total_elevation_gain) if activity.total_elevation_gain else None,
+            "total_elevation_gain_unit": str(activity.total_elevation_gain.unit) if activity.total_elevation_gain else None,
+        })
+    return result_activities
+
+def get_activity_details(run_context: RunContext, activity_id: int) -> dict:
+    """
+    Fetches detailed information for a specific activity by its ID.
+
+    Args:
+        activity_id: The ID of the activity to fetch.
+
+    Returns:
+        A dictionary containing the detailed activity information.
+    """
+    client = get_strava_client()
+    activity = client.get_activity(activity_id)
+    return {
+        "id": activity.id,
+        "name": activity.name,
+        "description": activity.description,
+        "distance": float(activity.distance) if activity.distance else None,
+        "distance_unit": str(activity.distance.unit) if activity.distance else None,
+        "moving_time": str(activity.moving_time) if activity.moving_time else None,
+        "elapsed_time": str(activity.elapsed_time) if activity.elapsed_time else None,
+        "type": activity.type,
+        "start_date": str(activity.start_date),
+        "average_speed": float(activity.average_speed) if activity.average_speed else None,
+        "average_speed_unit": str(activity.average_speed.unit) if activity.average_speed else None,
+        "max_speed": float(activity.max_speed) if activity.max_speed else None,
+        "max_speed_unit": str(activity.max_speed.unit) if activity.max_speed else None,
+        "total_elevation_gain": float(activity.total_elevation_gain) if activity.total_elevation_gain else None,
+        "total_elevation_gain_unit": str(activity.total_elevation_gain.unit) if activity.total_elevation_gain else None,
+        "calories": activity.calories,
+        "average_heartrate": activity.average_heartrate,
+        "max_heartrate": activity.max_heartrate,
+    }
+
+def get_athlete_profile(run_context: RunContext) -> dict:
+    """
+    Fetches the authenticated athlete's profile information.
+
+    Returns:
+        A dictionary containing the athlete's profile details.
+    """
+    client = get_strava_client()
+    athlete = client.get_athlete()
+    return {
+        "id": athlete.id,
+        "username": athlete.username,
+        "firstname": athlete.firstname,
+        "lastname": athlete.lastname,
+        "city": athlete.city,
+        "state": athlete.state,
+        "country": athlete.country,
+        "sex": athlete.sex,
+        "premium": athlete.premium,
+        "created_at": str(athlete.created_at),
+        "updated_at": str(athlete.updated_at),
+        "profile_medium": athlete.profile_medium,
+        "profile": athlete.profile,
+    }
+
+def get_weekly_summary(run_context: RunContext) -> dict:
+    """
+    Calculates and returns a summary of the authenticated athlete's activities for the current week.
+    Includes total distance, moving time, and elevation gain.
+    """
+    client = get_strava_client()
+    athlete = client.get_athlete()
+    
+    # Strava API provides YTD and All-Time stats, not directly weekly.
+    # To get weekly, we need to fetch activities for the week and sum them.
+    # For simplicity, this example will provide a basic summary based on recent activities.
+    # A more robust implementation would involve date filtering.
+
+    activities = client.get_activities(limit=100) # Fetch a reasonable number of recent activities
+
+    total_distance = 0.0
+    total_moving_time = 0 # in seconds
+    total_elevation_gain = 0.0
+
+    # Assuming 'current week' means activities from the last 7 days
+    one_week_ago = time.time() - (7 * 24 * 60 * 60)
+
+    for activity in activities:
+        if activity.start_date.timestamp() > one_week_ago:
+            total_distance += float(activity.distance) if activity.distance else 0.0
+            total_moving_time += float(activity.moving_time) if activity.moving_time else 0
+            total_elevation_gain += float(activity.total_elevation_gain) if activity.total_elevation_gain else 0.0
+
+    return {
+        "total_distance_km": round(total_distance / 1000, 2),
+        "total_moving_time_hours": round(total_moving_time / 3600, 2),
+        "total_elevation_gain_meters": round(total_elevation_gain, 2),
+        "summary_period": "Last 7 days"
+    }
+
+def get_activities_by_type(run_context: RunContext, activity_type: str, limit: int = 10) -> list[dict]:
+    """
+    Get a list of recent Strava activities of a specific type (e.g., Run, Ride, Swim).
+
+    Parameters:
+    - activity_type (str): The type of activity to filter (e.g., "Run").
+    - limit (int): Number of recent activities to return (default is 10).
+
+    Returns:
+    - A list of activity summaries including ID, name, distance (in km), time, and start date.
+    """
+    client = get_strava_client()
+    activities = client.get_activities(limit=limit)
+    return [
+        {
+            "id": a.id,
+            "name": a.name,
+            "distance_km": round(a.distance.num / 1000, 2),
+            "moving_time_min": round(float(a.moving_time) / 60, 2),
+            "start_date": str(a.start_date)
+        }
+        for a in activities if str(a.type).lower() == activity_type.lower()
+    ]
+
+
+def get_best_efforts(run_context: RunContext, activity_id: int) -> dict:
+    """
+    Retrieve the best effort segments (e.g., fastest 1k, 5k) for a given activity.
+
+    Parameters:
+    - activity_id (int): The Strava activity ID to fetch best efforts from.
+
+    Returns:
+    - A dictionary with a list of best effort segment names, distances, and times.
+    """
+    client = get_strava_client()    
+    activity = client.get_activity(activity_id, include_all_efforts=True)
+    return {
+        "activity_id": activity.id,
+        "best_efforts": [
+            {
+                "name": effort.name,
+                "distance_m": effort.distance.num,
+                "elapsed_time_sec": float(effort.elapsed_time)
+            } for effort in activity.best_efforts
+        ]
+    }
+
+
+def get_activity_gps_coords(run_context: RunContext, activity_id: int) -> dict:
+    """
+    Get GPS coordinates (lat/lng) for a specific activity for mapping or visualization.
+
+    Parameters:
+    - activity_id (int): The Strava activity ID.
+
+    Returns:
+    - A dictionary containing GPS coordinates as a list of [lat, lng] pairs.
+    """
+    client = get_strava_client()
+    streams = client.get_activity_streams(activity_id, types=["latlng"])
+    if 'latlng' in streams:
+        return {
+            "activity_id": activity_id,
+            "gps_coordinates": streams['latlng'].data
+        }
+    return {"error": "No GPS data found for this activity."}
+
+
+def get_longest_run(run_context: RunContext, limit: int = 50) -> dict:
+    """
+    Find the user's longest recorded run activity.
+
+    Parameters:
+    - limit (int): Number of recent activities to search (default is 50).
+
+    Returns:
+    - A dictionary with the activity ID, name, distance (in km), time, and start date.
+    """
+    client = get_strava_client()
+    runs = [
+        a for a in client.get_activities(limit=limit)
+        if a.type.lower() == "run"
+    ]
+    if not runs:
+        return {"error": "No runs found."}
+
+    longest = max(runs, key=lambda x: x.distance.num)
+    return {
+        "id": longest.id,
+        "name": longest.name,
+        "distance_km": round(longest.distance.num / 1000, 2),
+        "moving_time_min": round(float(longest.moving_time) / 60, 2),
+        "start_date": str(longest.start_date)
+    }
+
+
+def get_race_performances(run_context: RunContext, keyword: str = "race", limit: int = 50) -> list[dict]:
+    """
+    Retrieve recent race-type activities (e.g., official races or time trials).
+
+    Parameters:
+    - keyword (str): A keyword to identify races (default is "race").
+    - limit (int): Number of recent activities to search (default is 50).
+
+    Returns:
+    - A list of race activities with name, distance, time, and start date.
+    """
+    client = get_strava_client()
+    races = [
+        {
+            "id": a.id,
+            "name": a.name,
+            "distance_km": round(a.distance.num / 1000, 2),
+            "moving_time_min": round(float(a.moving_time) / 60, 2),
+            "start_date": str(a.start_date)
+        }
+        for a in client.get_activities(limit=limit)
+        if keyword.lower() in a.name.lower()
+    ]
+    return races
+
+
+def compare_activities(run_context: RunContext, activity_id_1: int, activity_id_2: int) -> dict:
+    """
+    Compare two activities in terms of distance, speed, and elevation gain.
+
+    Parameters:
+    - activity_id_1 (int): The ID of the first activity.
+    - activity_id_2 (int): The ID of the second activity.
+
+    Returns:
+    - A dictionary showing the key metrics and their differences between the two activities.
+    """
+    client = get_strava_client()
+    a1 = client.get_activity(activity_id_1)
+    a2 = client.get_activity(activity_id_2)
+
+    return {
+        "activity_1": {
+            "name": a1.name,
+            "distance_km": round(a1.distance.num / 1000, 2),
+            "moving_time_min": round(float(a1.moving_time) / 60, 2),
+            "elevation_gain_m": a1.total_elevation_gain.num
+        },
+        "activity_2": {
+            "name": a2.name,
+            "distance_km": round(a2.distance.num / 1000, 2),
+            "moving_time_min": round(float(a2.moving_time) / 60, 2),
+            "elevation_gain_m": a2.total_elevation_gain.num
+        },
+        "differences": {
+            "distance_km": round((a1.distance.num - a2.distance.num) / 1000, 2),
+            "time_min": round((float(a1.moving_time) - float(a2.moving_time)) / 60, 2),
+            "elevation_m": round(a1.total_elevation_gain.num - a2.total_elevation_gain.num, 2)
+        }
+    }
+    
+def find_personal_records(run_context: RunContext) -> dict:
+    """
+    Finds personal records such as longest run, fastest pace, and max elevation gain.
+
+    Returns:
+    - A dictionary with distance, pace, and elevation personal bests.
+    """
+    client = get_strava_client()
+    activities = client.get_activities()
+
+    longest = None
+    fastest = None
+    max_elev = None
+
+    for act in activities:
+        if str(act.type).lower() != "run":
+            continue
+        if not longest or act.distance > longest.distance:
+            longest = act
+        pace = float(act.moving_time) / (float(act.distance) / 1000)
+        if not fastest or pace < fastest["pace"]:
+            fastest = {"activity": act, "pace": pace}
+        if not max_elev or act.total_elevation_gain > max_elev.total_elevation_gain:
+            max_elev = act
+
+    return {
+        "longest_run_km": round(longest.distance.num / 1000, 2),
+        "fastest_pace_min_per_km": round(fastest["pace"] / 60, 2),
+        "highest_elevation_gain_m": round(max_elev.total_elevation_gain.num, 1)
+    }
+    
+        
 
 strava_coach = Agent(
     model=gemini_model,
+    tools=[
+        get_athlete_stats,
+        get_latest_activities,
+        get_activity_details,
+        get_athlete_profile,
+        get_weekly_summary,
+        find_personal_records,
+        get_activities_by_type,
+        get_best_efforts,
+        get_activity_gps_coords,
+        compare_activities,
+        get_longest_run,
+        get_race_performances
+    ],
     system_prompt="""
         You are the StravaCoach, a friendly and motivational AI assistant specializing in running and fitness data.
         You have access to the user's Strava history and can retrieve information about their runs, including distance, time, pace, personal records, and recent activities.
         When a user asks for data, provide it in a clear, encouraging, and helpful manner.
-        
-        (Note: In this implementation, you will simulate fetching data. You do not have real tools connected yet.)
     """
 )

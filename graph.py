@@ -9,9 +9,9 @@ from pydantic import BaseModel, EmailStr
 from pydantic_ai import Agent
 from pydantic_graph import BaseNode, End, Graph, GraphRunContext
 
-from agents import team_leader, general_assistant, weather_assistant
+from agents import team_leader, general_assistant, weather_assistant, strava_coach
 
-from models import User,State
+from models.domain import User,State
 
 
 # --- Node Definitions ---
@@ -21,8 +21,8 @@ class StravaCoach(BaseNode[State]):
     """Handles requests related to running and Strava data."""
     async def run(self, ctx: GraphRunContext[State]) -> End:
         print("✅ Executing StravaCoach Node...")
-        # In a real scenario, you'd use tools to fetch actual Strava data.
-        ctx.state.strava_response = {"distance": "15km", "time": "1 hour 12 minutes"}
+        result = await strava_coach.run(ctx.state.input_request)
+        ctx.state.strava_response = result.output
         print(f"   -> Fetched Strava Data: {ctx.state.strava_response}")
         return End(ctx.state.strava_response)
 
@@ -107,10 +107,22 @@ async def main():
     # Example 1: User asks for run data
     await run_assistant("I want my latest run data from Strava", user=rohan)
 
-    # Example 2: User asks for the weather
+    # Example 2: User asks for specific activity details (replace with a real activity ID from your Strava)
+    # await run_assistant("Tell me more about activity 123456789", user=rohan)
+
+    # Example 3: User asks for athlete profile
+    await run_assistant("What is my Strava profile information?", user=rohan)
+
+    # Example 4: User asks for weekly summary
+    await run_assistant("What is my weekly Strava summary?", user=rohan)
+
+    # Example 5: User asks for progress trend
+    await run_assistant("What is my progress trend for running?", user=rohan)
+
+    # Example 6: User asks for the weather
     await run_assistant("What's the weather like in London tomorrow?", user=rohan)
 
-    # Example 3: User asks a general question
+    # Example 7: User asks a general question
     await run_assistant("Can you list the top five highest-grossing animated films of 2024?", user=rohan)
 
 

@@ -2,7 +2,7 @@ from typing import Optional
 import httpx
 from pydantic_ai import Agent, RunContext
 from config.llm_config import gemini_model
-from models import User
+from models.domain import User
 
 
 # --- Define the Weather Assistant Agent ---
