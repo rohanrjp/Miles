@@ -80,19 +80,19 @@ class TeamLeader(BaseNode[State]):
 # --- Graph Execution ---
 
 async def run_graph(input_request: str, user: User):
-    """Helper function to initialize and run the graph for a given request."""
     print(f"--- Running Graph for: '{input_request}' ---")
     initial_state = State(user=user, input_request=input_request)
 
-    # The graph must be aware of all possible nodes it might need to execute.
     assistant_graph = Graph(
         nodes=(TeamLeader, StravaCoach, WeatherAssistant, GeneralAssistant)
     )
 
-    # Start the graph execution with the TeamLeader node
-    final_state = await assistant_graph.run(TeamLeader(), state=initial_state)
-
-    print("\nFinal State Dump:")
-    print(final_state)
-    print("\n" + "="*60 + "\n")
-    return final_state.output
+    try:
+        final_state = await assistant_graph.run(TeamLeader(), state=initial_state)
+        print("\nFinal State Dump:")
+        print(final_state)
+        print("\n" + "="*60 + "\n")
+        return final_state.output or "✅ Done! No output."
+    except Exception as e:
+        print("⚠️ Graph execution error:", e)
+        return "⚠️ Sorry, something went wrong while processing your request."
