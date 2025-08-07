@@ -267,7 +267,7 @@ def get_longest_run(run_context: RunContext) -> dict:
         Dict with name, distance, pace, time, date
     """
     client = get_strava_client()
-    activities = client.get_activities(per_page=100)
+    activities = client.get_activities()
     longest = max(
         (a for a in activities if a.type == "Run"),
         key=lambda a: a.distance.num,
