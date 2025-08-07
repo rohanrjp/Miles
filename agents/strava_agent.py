@@ -267,20 +267,26 @@ def get_longest_run(run_context: RunContext) -> dict:
         Dict with name, distance, pace, time, date
     """
     client = get_strava_client()
-    activities = client.get_activities()
+    activities = client.get_activities(limit=100)
+
     longest = max(
-        (a for a in activities if a.type == "Run"),
-        key=lambda a: a.distance.num,
+        (a for a in activities if a.type == "Run" and a.distance is not None),
+        key=lambda a: float(a.distance),
         default=None
     )
     if not longest:
         return {"message": "No run data found"}
 
+    distance_m = float(longest.distance)  # in meters
+    distance_km = round(distance_m / 1000, 2)
+    moving_time_sec = longest.moving_time.total_seconds()
+    pace_min_per_km = round((moving_time_sec / distance_km) / 60, 2)
+
     return {
         "name": longest.name,
-        "distance_km": round(longest.distance.num / 1000, 2),
-        "pace_min_per_km": round(longest.moving_time.total_seconds() / (longest.distance.num / 1000) / 60, 2),
-        "moving_time_min": round(longest.moving_time.total_seconds() / 60, 2),
+        "distance_km": distance_km,
+        "pace_min_per_km": pace_min_per_km,
+        "moving_time_min": round(moving_time_sec / 60, 2),
         "date": longest.start_date_local.strftime("%Y-%m-%d")
     }
 
