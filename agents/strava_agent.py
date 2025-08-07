@@ -159,39 +159,35 @@ def get_athlete_profile(run_context: RunContext) -> dict:
         "profile": athlete.profile,
     }
 
-def get_weekly_summary(run_context: RunContext) -> dict:
+from datetime import datetime, timedelta
+
+def get_weekly_progress(run_context: RunContext) -> dict:
     """
-    Calculates and returns a summary of the authenticated athlete's activities for the current week.
-    Includes total distance, moving time, and elevation gain.
+    Summarizes the total running distance and time in the past 7 days.
+
+    Returns:
+        Dict with total distance, number of runs, and total time.
     """
     client = get_strava_client()
-    athlete = client.get_athlete()
-    
-    # Strava API provides YTD and All-Time stats, not directly weekly.
-    # To get weekly, we need to fetch activities for the week and sum them.
-    # For simplicity, this example will provide a basic summary based on recent activities.
-    # A more robust implementation would involve date filtering.
+    one_week_ago = datetime.utcnow() - timedelta(days=7)
+    activities = client.get_activities(after=one_week_ago)
 
-    activities = client.get_activities(limit=100) # Fetch a reasonable number of recent activities
-
-    total_distance = 0.0
-    total_moving_time = 0 # in seconds
-    total_elevation_gain = 0.0
-
-    # Assuming 'current week' means activities from the last 7 days
-    one_week_ago = time.time() - (7 * 24 * 60 * 60)
+    total_distance = 0
+    total_time = 0
+    count = 0
 
     for activity in activities:
-        if activity.start_date.timestamp() > one_week_ago:
-            total_distance += float(activity.distance) if activity.distance else 0.0
-            total_moving_time += float(activity.moving_time) if activity.moving_time else 0
-            total_elevation_gain += float(activity.total_elevation_gain) if activity.total_elevation_gain else 0.0
+        if activity.type != "Run":
+            continue
+        count += 1
+        total_distance += activity.distance.num
+        total_time += activity.moving_time.total_seconds()
 
     return {
+        "run_count": count,
         "total_distance_km": round(total_distance / 1000, 2),
-        "total_moving_time_hours": round(total_moving_time / 3600, 2),
-        "total_elevation_gain_meters": round(total_elevation_gain, 2),
-        "summary_period": "Last 7 days"
+        "total_time_min": round(total_time / 60, 1),
+        "average_pace_min_per_km": round((total_time / (total_distance / 1000)) / 60, 2) if total_distance else None
     }
 
 def get_activities_by_type(run_context: RunContext, activity_type: str, limit: int = 10) -> list[dict]:
@@ -263,31 +259,29 @@ def get_activity_gps_coords(run_context: RunContext, activity_id: int) -> dict:
     return {"error": "No GPS data found for this activity."}
 
 
-def get_longest_run(run_context: RunContext, limit: int = 50) -> dict:
+def get_longest_run(run_context: RunContext) -> dict:
     """
-    Find the user's longest recorded run activity.
-
-    Parameters:
-    - limit (int): Number of recent activities to search (default is 50).
+    Finds the athlete’s longest run ever recorded.
 
     Returns:
-    - A dictionary with the activity ID, name, distance (in km), time, and start date.
+        Dict with name, distance, pace, time, date
     """
     client = get_strava_client()
-    runs = [
-        a for a in client.get_activities(limit=limit)
-        if a.type.lower() == "run"
-    ]
-    if not runs:
-        return {"error": "No runs found."}
+    activities = client.get_activities(per_page=100)
+    longest = max(
+        (a for a in activities if a.type == "Run"),
+        key=lambda a: a.distance.num,
+        default=None
+    )
+    if not longest:
+        return {"message": "No run data found"}
 
-    longest = max(runs, key=lambda x: x.distance.num)
     return {
-        "id": longest.id,
         "name": longest.name,
         "distance_km": round(longest.distance.num / 1000, 2),
-        "moving_time_min": round(float(longest.moving_time) / 60, 2),
-        "start_date": str(longest.start_date)
+        "pace_min_per_km": round(longest.moving_time.total_seconds() / (longest.distance.num / 1000) / 60, 2),
+        "moving_time_min": round(longest.moving_time.total_seconds() / 60, 2),
+        "date": longest.start_date_local.strftime("%Y-%m-%d")
     }
 
 
@@ -382,8 +376,94 @@ def find_personal_records(run_context: RunContext) -> dict:
         "fastest_pace_min_per_km": round(fastest["pace"] / 60, 2),
         "highest_elevation_gain_m": round(max_elev.total_elevation_gain.num, 1)
     }
+
+def get_rolled_up_stats(run_context: RunContext) -> dict:
+    """
+    Retrieves rolled-up running statistics for the authenticated Strava athlete.
+
+    This tool provides high-level summary statistics across different timeframes:
+    - Recent totals (last 4 weeks)
+    - Year-to-date totals (YTD)
+    - All-time totals
+
+    Each section includes:
+    - Total number of runs
+    - Total distance (in kilometers)
+    - Total elevation gain (in meters, where available)
+
+    This is useful for tracking progress over time, generating training insights,
+    and comparing short-term vs long-term performance trends.
+
+    Returns:
+        A dictionary structured as:
+        {
+            "recent_run_totals": {
+                "count": int,
+                "distance_km": float,
+                "elevation_gain_m": float
+            },
+            "ytd_run_totals": {
+                "count": int,
+                "distance_km": float
+            },
+            "all_run_totals": {
+                "count": int,
+                "distance_km": float
+            }
+        }
+    """
+    client = get_strava_client()
+    athlete = client.get_athlete()
+    stats = client.get_athlete_stats(athlete.id)
+
+    return {
+        "recent_run_totals": {
+            "count": stats.recent_run_totals.count,
+            "distance_km": round(stats.recent_run_totals.distance / 1000, 2),
+            "elevation_gain_m": stats.recent_run_totals.elevation_gain
+        },
+        "ytd_run_totals": {
+            "count": stats.ytd_run_totals.count,
+            "distance_km": round(stats.ytd_run_totals.distance / 1000, 2)
+        },
+        "all_run_totals": {
+            "count": stats.all_run_totals.count,
+            "distance_km": round(stats.all_run_totals.distance / 1000, 2)
+        }
+    }
     
-        
+def get_fastest_run_over_distance(run_context: RunContext, min_distance_km: float = 5.0) -> dict:
+    """
+    Returns the fastest average pace run above a minimum distance.
+
+    Args:
+        min_distance_km: Minimum run distance to consider.
+
+    Returns:
+        Dict with fastest run info.
+    """
+    client = get_strava_client()
+    activities = client.get_activities(per_page=100)
+    qualified = [
+        a for a in activities
+        if a.type == "Run" and (a.distance.num / 1000) >= min_distance_km
+    ]
+
+    if not qualified:
+        return {"message": f"No runs longer than {min_distance_km}km found."}
+
+    fastest = min(
+        qualified,
+        key=lambda a: a.moving_time.total_seconds() / a.distance.num
+    )
+
+    pace = fastest.moving_time.total_seconds() / (fastest.distance.num / 1000)
+    return {
+        "name": fastest.name,
+        "distance_km": round(fastest.distance.num / 1000, 2),
+        "average_pace_min_per_km": round(pace / 60, 2),
+        "date": fastest.start_date_local.strftime("%Y-%m-%d")
+    }
 
 strava_coach = Agent(
     model=gemini_model,
@@ -392,14 +472,16 @@ strava_coach = Agent(
         get_latest_activities,
         get_activity_details,
         get_athlete_profile,
-        get_weekly_summary,
+        get_weekly_progress,
         find_personal_records,
         get_activities_by_type,
         get_best_efforts,
         get_activity_gps_coords,
         compare_activities,
         get_longest_run,
-        get_race_performances
+        get_race_performances,
+        get_rolled_up_stats,
+        get_fastest_run_over_distance
     ],
     system_prompt="""
         You are the StravaCoach, a friendly and motivational AI assistant specializing in running and fitness data.

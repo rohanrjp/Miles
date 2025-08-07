@@ -9,7 +9,7 @@ from pydantic import BaseModel, EmailStr
 from pydantic_ai import Agent
 from pydantic_graph import BaseNode, End, Graph, GraphRunContext
 
-from agents import team_leader, general_assistant, weather_assistant, strava_coach
+from agents import team_leader, general_assistant, weather_assistant, strava_coach , telegram_response_agent
 
 from models.domain import User,State
 
@@ -24,7 +24,19 @@ class StravaCoach(BaseNode[State]):
         result = await strava_coach.run(ctx.state.input_request)
         ctx.state.strava_response = result.output
         print(f"   -> Fetched Strava Data: {ctx.state.strava_response}")
-        return End(ctx.state.strava_response)
+        return TelegramResponse()
+
+@dataclass
+class TelegramResponse(BaseNode[State]):
+    """Handles requests related to running and Strava data."""
+    async def run(self, ctx: GraphRunContext[State]) -> End:
+        print("✅ Executing TelegramResponse Node...")
+        result = await telegram_response_agent.run(ctx.state.strava_response)
+        ctx.state.telegram_output = result.output
+        print(f"   -> Fetched Strava Data: {ctx.state.telegram_output}")
+        return End(ctx.state.telegram_output)
+
+
 
 @dataclass
 class WeatherAssistant(BaseNode[State]):

@@ -16,3 +16,4 @@ class State:
     strava_response: dict = field(default_factory=dict)
     weather_response: str = ""
     general_response: str = ""
+    telegram_output:str = ""
