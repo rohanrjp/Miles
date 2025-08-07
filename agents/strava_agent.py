@@ -279,7 +279,7 @@ def get_longest_run(run_context: RunContext) -> dict:
 
     distance_m = float(longest.distance)  # in meters
     distance_km = round(distance_m / 1000, 2)
-    moving_time_sec = longest.moving_time.total_seconds()
+    moving_time_sec = longest.moving_time
     pace_min_per_km = round((moving_time_sec / distance_km) / 60, 2)
 
     return {
