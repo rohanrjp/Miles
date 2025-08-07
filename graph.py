@@ -96,7 +96,7 @@ async def run_graph(input_request: str, user: User):
     initial_state = State(user=user, input_request=input_request)
 
     assistant_graph = Graph(
-        nodes=(TeamLeader, StravaCoach, WeatherAssistant, GeneralAssistant)
+        nodes=(TeamLeader, StravaCoach, WeatherAssistant, GeneralAssistant, TelegramResponse)
     )
 
     try:

@@ -180,8 +180,8 @@ def get_weekly_progress(run_context: RunContext) -> dict:
         if activity.type != "Run":
             continue
         count += 1
-        total_distance += activity.distance.num
-        total_time += activity.moving_time.total_seconds()
+        total_distance += activity.distance
+        total_time += activity.moving_time
 
     return {
         "run_count": count,
@@ -207,7 +207,7 @@ def get_activities_by_type(run_context: RunContext, activity_type: str, limit: i
         {
             "id": a.id,
             "name": a.name,
-            "distance_km": round(a.distance.num / 1000, 2),
+            "distance_km": round(a.distance / 1000, 2),
             "moving_time_min": round(float(a.moving_time) / 60, 2),
             "start_date": str(a.start_date)
         }
@@ -232,7 +232,7 @@ def get_best_efforts(run_context: RunContext, activity_id: int) -> dict:
         "best_efforts": [
             {
                 "name": effort.name,
-                "distance_m": effort.distance.num,
+                "distance_m": effort.distance,
                 "elapsed_time_sec": float(effort.elapsed_time)
             } for effort in activity.best_efforts
         ]
@@ -335,20 +335,20 @@ def compare_activities(run_context: RunContext, activity_id_1: int, activity_id_
     return {
         "activity_1": {
             "name": a1.name,
-            "distance_km": round(a1.distance.num / 1000, 2),
+            "distance_km": round(a1.distance / 1000, 2),
             "moving_time_min": round(float(a1.moving_time) / 60, 2),
-            "elevation_gain_m": a1.total_elevation_gain.num
+            "elevation_gain_m": a1.total_elevation_gain
         },
         "activity_2": {
             "name": a2.name,
-            "distance_km": round(a2.distance.num / 1000, 2),
+            "distance_km": round(a2.distance / 1000, 2),
             "moving_time_min": round(float(a2.moving_time) / 60, 2),
-            "elevation_gain_m": a2.total_elevation_gain.num
+            "elevation_gain_m": a2.total_elevation_gain
         },
         "differences": {
-            "distance_km": round((a1.distance.num - a2.distance.num) / 1000, 2),
+            "distance_km": round((a1.distance - a2.distance) / 1000, 2),
             "time_min": round((float(a1.moving_time) - float(a2.moving_time)) / 60, 2),
-            "elevation_m": round(a1.total_elevation_gain.num - a2.total_elevation_gain.num, 2)
+            "elevation_m": round(a1.total_elevation_gain - a2.total_elevation_gain, 2)
         }
     }
     
@@ -378,9 +378,9 @@ def find_personal_records(run_context: RunContext) -> dict:
             max_elev = act
 
     return {
-        "longest_run_km": round(longest.distance.num / 1000, 2),
+        "longest_run_km": round(longest.distance / 1000, 2),
         "fastest_pace_min_per_km": round(fastest["pace"] / 60, 2),
-        "highest_elevation_gain_m": round(max_elev.total_elevation_gain.num, 1)
+        "highest_elevation_gain_m": round(max_elev.total_elevation_gain, 1)
     }
 
 def get_rolled_up_stats(run_context: RunContext) -> dict:
@@ -449,10 +449,10 @@ def get_fastest_run_over_distance(run_context: RunContext, min_distance_km: floa
         Dict with fastest run info.
     """
     client = get_strava_client()
-    activities = client.get_activities(per_page=100)
+    activities = client.get_activities(limit=100)
     qualified = [
         a for a in activities
-        if a.type == "Run" and (a.distance.num / 1000) >= min_distance_km
+        if a.type == "Run" and (a.distance/ 1000) >= min_distance_km
     ]
 
     if not qualified:
@@ -460,13 +460,13 @@ def get_fastest_run_over_distance(run_context: RunContext, min_distance_km: floa
 
     fastest = min(
         qualified,
-        key=lambda a: a.moving_time.total_seconds() / a.distance.num
+        key=lambda a: a.moving_time / a.distance
     )
 
-    pace = fastest.moving_time.total_seconds() / (fastest.distance.num / 1000)
+    pace = fastest.moving_time / (fastest.distance / 1000)
     return {
         "name": fastest.name,
-        "distance_km": round(fastest.distance.num / 1000, 2),
+        "distance_km": round(fastest.distance / 1000, 2),
         "average_pace_min_per_km": round(pace / 60, 2),
         "date": fastest.start_date_local.strftime("%Y-%m-%d")
     }
