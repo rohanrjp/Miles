@@ -9,9 +9,11 @@ from pydantic import BaseModel, EmailStr
 from pydantic_ai import Agent
 from pydantic_graph import BaseNode, End, Graph, GraphRunContext
 
-from agents import team_leader, general_assistant, weather_assistant, strava_coach , telegram_response_agent
+from agents import team_leader, general_assistant, weather_assistant, strava_coach , telegram_response_agent, recovery_agent
 
 from models.domain import User,State
+
+from schemas import RecoveryAdvice
 
 
 # --- Node Definitions ---
@@ -19,12 +21,19 @@ from models.domain import User,State
 @dataclass
 class StravaCoach(BaseNode[State]):
     """Handles requests related to running and Strava data."""
-    async def run(self, ctx: GraphRunContext[State]) -> End:
+    async def run(self, ctx: GraphRunContext[State]) -> Union[RecoveryNode, TelegramResponse]:
         print("✅ Executing StravaCoach Node...")
-        result = await strava_coach.run(ctx.state.input_request)
+        
+        result = await strava_coach.run(f"Get all my runs from the last 7 days. Request: {ctx.state.input_request}")
         ctx.state.strava_response = result.output
         print(f"   -> Fetched Strava Data: {ctx.state.strava_response}")
-        return TelegramResponse()
+        
+        if "RecoveryAnalysis" in ctx.state.team_leader_decision:
+            print("   -> Handing off to RecoveryNode for analysis.")
+            return RecoveryNode() 
+        else:
+            print("   -> Handing off to TelegramResponse for direct output.")
+            return TelegramResponse()
 
 @dataclass
 class TelegramResponse(BaseNode[State]):
@@ -67,11 +76,12 @@ class TeamLeader(BaseNode[State]):
     ) -> Union[StravaCoach, WeatherAssistant, GeneralAssistant]:
         print("Executing TeamLeader Node...")
 
-        # Use the agent to decide which node to use next
+        # Updated prompt to include the new analysis task
         prompt = (
             f"Given the user request: '{ctx.state.input_request}', "
             "which tool should I use? The options are: "
-            "'StravaCoach' for running data, "
+            "'StravaCoach' for retrieving running history/data, "
+            "'RecoveryAnalysis' to analyze run history and decide if today is a good day to run, "
             "'WeatherAssistant' for weather queries, or "
             "'GeneralAssistant' for anything else. "
             "Respond with only the name of the tool."
@@ -81,14 +91,38 @@ class TeamLeader(BaseNode[State]):
         ctx.state.team_leader_decision = decision
         print(f"   -> TeamLeader Decision: '{decision}'")
 
-        # Return an instance of the chosen node
-        if "StravaCoach" in decision:
+        if "StravaCoach" in decision or "RecoveryAnalysis" in decision:
             return StravaCoach()
         elif "WeatherAssistant" in decision:
             return WeatherAssistant()
         else:
             return GeneralAssistant()
 
+@dataclass
+class RecoveryNode(BaseNode[State]):
+    """Analyzes recent run data to provide recovery advice."""
+    async def run(self, ctx: GraphRunContext[State]) -> TelegramResponse:
+        print("✅ Executing RecoveryNode...")
+        if not ctx.state.strava_response:
+            return End("⚠️ I need Strava data to provide recovery advice, but I couldn't find any.")
+
+        result = await recovery_agent.run(run_data=ctx.state.strava_response)
+        advice = result.output
+
+        ctx.state.recovery_advice = advice
+        print(f"   -> Generated Recovery Advice: {advice.is_good_day_to_run}, Reason: {advice.reasoning}")
+
+        formatted_advice = (
+            f"Here's my analysis on whether you should run today:\n\n"
+            f"**Recommendation:** {'A run sounds like a great idea! ✅' if advice.is_good_day_to_run else 'Today should be a rest day. 😴'}\n\n"
+            f"**Reasoning:** {advice.reasoning}\n\n"
+            f"**Suggested Activity:** {advice.suggested_activity}"
+        )
+
+        ctx.state.strava_response = formatted_advice 
+
+        return TelegramResponse()
+    
 # --- Graph Execution ---
 
 async def run_graph(input_request: str, user: User):
@@ -96,7 +130,7 @@ async def run_graph(input_request: str, user: User):
     initial_state = State(user=user, input_request=input_request)
 
     assistant_graph = Graph(
-        nodes=(TeamLeader, StravaCoach, WeatherAssistant, GeneralAssistant, TelegramResponse)
+        nodes=(TeamLeader, StravaCoach, WeatherAssistant, GeneralAssistant, TelegramResponse,RecoveryNode)
     )
 
     try:

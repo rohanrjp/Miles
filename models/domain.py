@@ -1,5 +1,6 @@
 from dataclasses import dataclass,field
 from pydantic import EmailStr
+from schemas import RecoveryAdvice
 
 
 @dataclass
@@ -17,3 +18,4 @@ class State:
     weather_response: str = ""
     general_response: str = ""
     telegram_output:str = ""
+    recovery_advice: RecoveryAdvice | None = None
