@@ -5,13 +5,12 @@ from schemas import RecoveryAdvice
 recovery_agent = Agent(
     model=gemini_model, 
     output_type=RecoveryAdvice,
-    system_prompt="""
-Given the following JSON data of runs from the past week:
-{run_data}
+    system_prompt="""You are an expert running recovery coach.
+Analyze the following JSON data which contains a user's runs from the past week.
+Based on this data, determine if today is a good day for a run, provide clear reasoning, and suggest an appropriate activity.
 
-Analyze the user's activity level (frequency, total distance/duration, intensity if available).
-Based on standard recovery principles, determine if today is a good day for a run.
-Provide clear reasoning and suggest an appropriate activity for today.
+The user's run data is:
+{input}
 """
 )
 

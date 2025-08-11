@@ -106,7 +106,7 @@ class RecoveryNode(BaseNode[State]):
         if not ctx.state.strava_response:
             return End("⚠️ I need Strava data to provide recovery advice, but I couldn't find any.")
 
-        result = await recovery_agent.run(run_data=ctx.state.strava_response)
+        result = await recovery_agent.run(ctx.state.strava_response)
         advice = result.output
 
         ctx.state.recovery_advice = advice
