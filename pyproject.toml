@@ -17,4 +17,5 @@ dependencies = [
     "alembic>=1.16.4",
     "sqlalchemy>=2.0.41",
     "psycopg[binary]>=3.2.9",
+    "langchain-google-community[calendar]>=2.0.7",
 ]

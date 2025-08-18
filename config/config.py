@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     STRAVA_ACESS_TOKEN:str
     STRAVA_REFRESH_TOKEN:str
     NEON_DB_STRING:str
+    GOOGLE_CLIENT_ID:str
+    GOOGLE_CLIENT_SECRET:str
     
     model_config=SettingsConfigDict(
         env_file=".env",

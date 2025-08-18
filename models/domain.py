@@ -17,5 +17,7 @@ class State:
     strava_response: dict = field(default_factory=dict)
     weather_response: str = ""
     general_response: str = ""
+    calendar_response: str = ""
     telegram_output:str = ""
     recovery_advice: RecoveryAdvice | None = None
+    calendar_prompt:str = ""

@@ -1,6 +1,7 @@
 from __future__ import annotations as _annotations
 
 import asyncio
+import datetime
 from dataclasses import dataclass, field
 from typing import Union
 
@@ -9,7 +10,7 @@ from pydantic import BaseModel, EmailStr
 from pydantic_ai import Agent
 from pydantic_graph import BaseNode, End, Graph, GraphRunContext
 
-from agents import team_leader, general_assistant, weather_assistant, strava_coach , telegram_response_agent, recovery_agent
+from agents import team_leader, general_assistant, weather_assistant, strava_coach , telegram_response_agent, recovery_agent, calendar_agent
 
 from models.domain import User,State
 
@@ -23,8 +24,14 @@ class StravaCoach(BaseNode[State]):
     """Handles requests related to running and Strava data."""
     async def run(self, ctx: GraphRunContext[State]) -> Union[RecoveryNode, TelegramResponse]:
         print("✅ Executing StravaCoach Node...")
+        today = datetime.date.today().isoformat()  
         
-        result = await strava_coach.run(f"Get all my runs from the last 7 days. Request: {ctx.state.input_request}")
+        prompt = (
+            f"Today is {today}. "
+            f"Request: {ctx.state.input_request}"
+        )
+        
+        result = await strava_coach.run(prompt)
         ctx.state.strava_response = result.output
         print(f"   -> Fetched Strava Data: {ctx.state.strava_response}")
         
@@ -58,6 +65,24 @@ class WeatherAssistant(BaseNode[State]):
         print(f"   -> Generated Weather Response: {ctx.state.weather_response}")
         return End(ctx.state.weather_response)
 
+
+@dataclass
+class CalendarAssistant(BaseNode[State]):
+    """Handles requests about the calendar."""
+    async def run(self, ctx: GraphRunContext[State]) -> End:
+        print("✅ Executing CalendarAssistant Node...")
+        if ctx.state.calendar_prompt == '':
+            result = await calendar_agent.run(ctx.state.input_request)
+            ctx.state.calendar_response = result.output
+            print(f"   -> Generated Calendar Response: {ctx.state.calendar_response}")
+            return End()
+        else:
+            result = await calendar_agent.run(ctx.state.calendar_prompt) 
+            ctx.state.calendar_response = result.output
+            print(f"   -> Generated Calendar Response: {ctx.state.calendar_response}")
+            return TelegramResponse()  
+        
+
 @dataclass
 class GeneralAssistant(BaseNode[State]):
     """Handles all other general queries."""
@@ -73,7 +98,7 @@ class TeamLeader(BaseNode[State]):
     """The first node that routes the request to the correct assistant."""
     async def run(
         self, ctx: GraphRunContext[State]
-    ) -> Union[StravaCoach, WeatherAssistant, GeneralAssistant]:
+    ) -> Union[StravaCoach, WeatherAssistant, GeneralAssistant, CalendarAssistant]:
         print("Executing TeamLeader Node...")
 
         # Updated prompt to include the new analysis task
@@ -82,7 +107,8 @@ class TeamLeader(BaseNode[State]):
             "which tool should I use? The options are: "
             "'StravaCoach' for retrieving running history/data, "
             "'RecoveryAnalysis' to analyze run history and decide if today is a good day to run, "
-            "'WeatherAssistant' for weather queries, or "
+            "'WeatherAssistant' for weather queries, "
+            "'CalendarAssistant' for calendar queries, or "
             "'GeneralAssistant' for anything else. "
             "Respond with only the name of the tool."
         )
@@ -95,8 +121,11 @@ class TeamLeader(BaseNode[State]):
             return StravaCoach()
         elif "WeatherAssistant" in decision:
             return WeatherAssistant()
+        elif "CalendarAssistant" in decision:
+            return CalendarAssistant()
         else:
             return GeneralAssistant()
+
 
 @dataclass
 class RecoveryNode(BaseNode[State]):
@@ -112,16 +141,50 @@ class RecoveryNode(BaseNode[State]):
         ctx.state.recovery_advice = advice
         print(f"   -> Generated Recovery Advice: {advice.is_good_day_to_run}, Reason: {advice.reasoning}")
 
-        formatted_advice = (
-            f"Here's my analysis on whether you should run today:\n\n"
-            f"**Recommendation:** {'A run sounds like a great idea! ✅' if advice.is_good_day_to_run else 'Today should be a rest day. 😴'}\n\n"
+        # Schedule event based on recovery advice
+        today = datetime.date.today()
+        start_time = datetime.datetime.combine(today, datetime.time(20, 0)).isoformat()
+        end_time = datetime.datetime.combine(today, datetime.time(21, 0)).isoformat()
+
+        event_summary = "Run" if advice.is_good_day_to_run else "Gym"
+
+        today = datetime.date.today().strftime("%Y-%m-%d")
+
+        ctx.state.calendar_prompt = (
+            f"Create a calendar event with the following details:\n"
+            f"- Summary: {event_summary}\n"
+            f"- Start datetime: {today} 20:00:00\n"
+            f"- End datetime: {today} 21:00:00\n"
+            f"- Timezone: Asia/Kolkata\n"
+            f"- Location: Chennai\n"
+            f"- Description: {event_summary} (created automatically)\n"
+            f"- Reminders: popup 60 minutes before\n"
+            f"- Conference data: True\n"
+            f"- Color ID: 5\n"
+        )
+        
+
+        # Format the response for Telegram
+        strava_summary = ctx.state.strava_response
+        recovery_summary = (
+            f"**Recommendation:** "
+            f"{'A run sounds like a great idea! ✅' if advice.is_good_day_to_run else 'Today should be a rest day. 😴'}\n\n"
             f"**Reasoning:** {advice.reasoning}\n\n"
             f"**Suggested Activity:** {advice.suggested_activity}"
         )
 
-        ctx.state.strava_response = formatted_advice 
+        calendar_confirmation = f"I have scheduled a {event_summary.lower()} session for you today from 8 PM to 9 PM."
 
-        return TelegramResponse()
+        formatted_message = (
+            f"Here is your daily summary:\n\n"
+            f"**Strava Summary:**\n{strava_summary}\n\n"
+            f"**Recovery Advice:**\n{recovery_summary}\n\n"
+            f"**Calendar:**\n{calendar_confirmation}"
+        )
+
+        ctx.state.strava_response = formatted_message
+
+        return CalendarAssistant()
     
 # --- Graph Execution ---
 
@@ -130,7 +193,7 @@ async def run_graph(input_request: str, user: User):
     initial_state = State(user=user, input_request=input_request)
 
     assistant_graph = Graph(
-        nodes=(TeamLeader, StravaCoach, WeatherAssistant, GeneralAssistant, TelegramResponse,RecoveryNode)
+        nodes=(TeamLeader, StravaCoach, WeatherAssistant, GeneralAssistant, TelegramResponse, RecoveryNode, CalendarAssistant)
     )
 
     try:

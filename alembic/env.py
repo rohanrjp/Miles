@@ -2,8 +2,11 @@ from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
+import sys,os
 
 from alembic import context
+
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -16,8 +19,8 @@ if config.config_file_name is not None:
 
 # add your model's MetaData object here
 # for 'autogenerate' support
-from models import StravaToken
-target_metadata = StravaToken.metadata
+from models import StravaToken, GoogleCalendarToken
+target_metadata = [StravaToken.metadata, GoogleCalendarToken.metadata]
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:

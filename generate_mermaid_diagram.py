@@ -1,8 +1,8 @@
 from pydantic_graph import Graph 
-from graph import TeamLeader, StravaCoach, WeatherAssistant, GeneralAssistant, TelegramResponse
+from graph import TeamLeader, StravaCoach, WeatherAssistant, GeneralAssistant, TelegramResponse, RecoveryNode,CalendarAssistant
 
 assistant_graph = Graph(
-        nodes=(TeamLeader, StravaCoach, WeatherAssistant, GeneralAssistant, TelegramResponse)
+        nodes=(TeamLeader, StravaCoach, WeatherAssistant, GeneralAssistant, TelegramResponse,RecoveryNode,CalendarAssistant)
     )
 
 if __name__=="__main__":
