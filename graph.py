@@ -75,7 +75,7 @@ class CalendarAssistant(BaseNode[State]):
             result = await calendar_agent.run(ctx.state.input_request)
             ctx.state.calendar_response = result.output
             print(f"   -> Generated Calendar Response: {ctx.state.calendar_response}")
-            return End()
+            return End(ctx.state.calendar_response)
         else:
             result = await calendar_agent.run(ctx.state.calendar_prompt) 
             ctx.state.calendar_response = result.output
