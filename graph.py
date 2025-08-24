@@ -2,6 +2,7 @@ from __future__ import annotations as _annotations
 
 import asyncio
 import datetime
+import zoneinfo
 from dataclasses import dataclass, field
 from typing import Union
 
@@ -207,25 +208,27 @@ class RecoveryNode(BaseNode[State]):
 
         # Schedule event based on recovery advice
         today = datetime.date.today()
-        start_time = datetime.datetime.combine(today, datetime.time(20, 0)).isoformat()
-        end_time = datetime.datetime.combine(today, datetime.time(21, 0)).isoformat()
+        tz = zoneinfo.ZoneInfo("Asia/Kolkata")
+
+        start_dt = datetime.datetime.combine(today, datetime.time(20, 0), tz)
+        end_dt = datetime.datetime.combine(today, datetime.time(21, 0), tz)
 
         event_summary = "Run" if advice.is_good_day_to_run else "Gym"
 
         today = datetime.date.today().strftime("%Y-%m-%d")
 
-        ctx.state.calendar_prompt = (
-            f"Create a calendar event with the following details:\n"
-            f"- Summary: {event_summary}\n"
-            f"- Start datetime: {today}T20:00:00+05:30\n"
-            f"- End datetime: {today}T21:00:00+05:30\n"
-            f"- Timezone: Asia/Kolkata\n"
-            f"- Location: Chennai\n"
-            f"- Description: {event_summary} (created automatically)\n"
-            f"- Reminders: popup 60 minutes before\n"
-            f"- Conference data: True\n"
-            f"- Color ID: 5\n"
-        )
+        ctx.state.calendar_prompt = f"""
+        Create a calendar event with the following details:
+        - Summary: {event_summary}
+        - Start datetime: {start_dt.isoformat()}
+        - End datetime: {end_dt.isoformat()}
+        - Timezone: Asia/Kolkata
+        - Location: Chennai
+        - Description: {event_summary} (created automatically by Miles :])
+        - Reminders: popup 60 minutes before
+        - Conference data: True
+        - Color ID: 5
+        """
         
 
         # Format the response for Telegram

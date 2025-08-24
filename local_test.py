@@ -7,7 +7,7 @@ async def main():
     user = User(name="Rohan Paul", email="rohan1007rjp@gmail.com", interests=["running", "coding"],home_city="Chennai")
     input_request = "should i run today?"
     input_request1 = "whats the weather like?"
-    result = await run_graph(input_request1, user)
+    result = await run_graph(input_request, user)
     print(result)
 
 if __name__ == "__main__":
