@@ -1,7 +1,7 @@
 
-# 🏃‍♂️ StravaCoachAI – Multi-Agent Running Assistant
+# 🏃‍♂️ Miles – Multi-Agent Running Assistant
 
-StravaCoachAI is an **AI-powered multi-agent system** designed to help runners make smarter training decisions.  
+Miles is an **AI-powered multi-agent coach** designed to help runners make smarter training decisions.  
 It combines **Strava data**, **weather forecasts**, and **memory-aware reasoning** to answer the big question every runner faces:
 
 👉 *"Should I run today?"*
@@ -36,3 +36,4 @@ It combines **Strava data**, **weather forecasts**, and **memory-aware reasoning
 ## 🤝 Contributing
 
 PRs are welcome! If you’d like to extend new agent nodes (nutrition, injury prevention, etc.), open an issue or draft a pull request.
+
