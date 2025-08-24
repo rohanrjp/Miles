@@ -11,3 +11,4 @@ wheels/
 .env
 alembic.ini
 credentials.json
+.DS_Store

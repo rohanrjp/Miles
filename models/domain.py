@@ -1,6 +1,8 @@
 from dataclasses import dataclass,field
 from pydantic import EmailStr
 from schemas import RecoveryAdvice
+from typing import List, Optional, Dict, Any
+from datetime import datetime
 
 
 @dataclass
@@ -8,6 +10,17 @@ class User:
     name: str
     email: EmailStr
     interests: list[str]
+    home_city:str
+
+@dataclass
+class Memory:
+    id: str
+    memory: str
+    hash: str
+    created_at: datetime
+    updated_at: Optional[datetime]
+    metadata: Dict[str, Any]
+    user_id: str
 
 @dataclass
 class State:
@@ -21,3 +34,4 @@ class State:
     telegram_output:str = ""
     recovery_advice: RecoveryAdvice | None = None
     calendar_prompt:str = ""
+    memories:List[Memory] = field(default_factory=list)

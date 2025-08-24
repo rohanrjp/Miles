@@ -36,18 +36,23 @@ def get_google_calendar_token(db: Session, user_id: str) -> GoogleCalendarToken:
 
 
 def save_google_calendar_token(db: Session, user_id: str, creds: Credentials):
-    """Save or update credentials in DB after refresh."""
     db_token = get_google_calendar_token(db, user_id)
     if db_token:
         db_token.access_token = creds.token
         db_token.refresh_token = creds.refresh_token
         db_token.expires_at = creds.expiry
+        db_token.token_uri = creds.token_uri
+        db_token.client_id = creds.client_id
+        db_token.client_secret = creds.client_secret
     else:
         db_token = GoogleCalendarToken(
             user_id=user_id,
             access_token=creds.token,
             refresh_token=creds.refresh_token,
             expires_at=creds.expiry,
+            token_uri=creds.token_uri,
+            client_id=creds.client_id,
+            client_secret=creds.client_secret,
         )
         db.add(db_token)
     db.commit()
@@ -55,10 +60,9 @@ def save_google_calendar_token(db: Session, user_id: str, creds: Credentials):
 
 # --- Calendar Service Setup ---
 def get_calendar_toolkit(user_id: str = "1") -> CalendarToolkit:
-    with next(get_db()) as db:  # ensures cleanup
+    with next(get_db()) as db:
         db_token = get_google_calendar_token(db, user_id)
 
-        # --- Trigger OAuth flow if no token in DB ---
         if not db_token:
             flow = InstalledAppFlow.from_client_secrets_file(
                 os.getenv("GOOGLE_CREDENTIALS_JSON", "credentials.json"),
@@ -67,21 +71,19 @@ def get_calendar_toolkit(user_id: str = "1") -> CalendarToolkit:
             creds = flow.run_local_server(port=0)
             save_google_calendar_token(db, user_id, creds)
         else:
-            # Build credentials from DB
             creds = Credentials(
                 token=db_token.access_token,
                 refresh_token=db_token.refresh_token,
-                token_uri="https://oauth2.googleapis.com/token",
-                client_id=os.getenv("GOOGLE_CLIENT_ID"),
-                client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
+                token_uri=db_token.token_uri,
+                client_id=db_token.client_id,
+                client_secret=db_token.client_secret,
                 scopes=SCOPES,
             )
 
-            # 🔄 Refresh if expired
             if creds.expired and creds.refresh_token:
                 creds.refresh(Request())
                 save_google_calendar_token(db, user_id, creds)
-
+    
     api_resource = build_resource_service(credentials=creds)
     return CalendarToolkit(api_resource=api_resource)
 

@@ -21,7 +21,7 @@ async def telegram_webhook(update: TelegramUpdate):
     text = message.get("text", "")
 
     # TODO: Replace with a real user object
-    user = User(name="Rohan Paul", email="rohan1007rjp@gmail.com", interests=["Python", "Go"])
+    user = User(name="Rohan Paul", email="rohan1007rjp@gmail.com", interests=["running", "coding"],home_city="Chennai")
 
     result = await run_graph(text, user)
 

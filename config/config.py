@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     NEON_DB_STRING:str
     GOOGLE_CLIENT_ID:str
     GOOGLE_CLIENT_SECRET:str
+    MEM0_API_KEY:str
     
     model_config=SettingsConfigDict(
         env_file=".env",
